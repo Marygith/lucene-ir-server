@@ -5,18 +5,14 @@ import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.*;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.IOException;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.Comparator;
 
 import static ru.nms.diplom.luceneir.utils.Constants.INDEX_DIR;
 
@@ -38,8 +34,9 @@ public class SearchServiceImpl extends SearchServiceGrpc.SearchServiceImplBase {
         analyzer = new StandardAnalyzer();
         parser = new QueryParser("contents", analyzer);
     }
+
     @Override
-    public void knn(SearchRequest request, StreamObserver<SearchResponse> responseObserver) {
+    public void knn(SearchRequest request, StreamObserver<DocumentsResponse> responseObserver) {
 
         Query query = null;
         try {
@@ -57,13 +54,7 @@ public class SearchServiceImpl extends SearchServiceGrpc.SearchServiceImplBase {
 
         System.out.println("Top " + request.getK() + " search results for query: " + request.getQuery());
 
-        SearchResponse.Builder responseBuilder = SearchResponse.newBuilder();
-        float minScore = Arrays.stream(topDocs.scoreDocs).min(Comparator.comparingDouble(sc -> sc.score)).get().score;
-        float maxScore = Arrays.stream(topDocs.scoreDocs).max(Comparator.comparingDouble(sc -> sc.score)).get().score;
-        float denominator = maxScore == minScore
-                ? maxScore
-                : (maxScore - minScore);
-        if (denominator == 0) throw new RuntimeException("wow denominator is 0, max score was: "+ maxScore + ", min score was: " + minScore);
+        DocumentsResponse.Builder responseBuilder = DocumentsResponse.newBuilder();
 
         for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
             int docId = scoreDoc.doc;
@@ -73,10 +64,45 @@ public class SearchServiceImpl extends SearchServiceGrpc.SearchServiceImplBase {
             } catch (IOException e) {
                 throw new RuntimeException("did not manage to get doc from searcher", e);
             }
-            responseBuilder.addDocuments(ru.nms.diplom.luceneir.service.Document.newBuilder().setId(doc.get("id")).setContent(doc.get("contents")).setScore((scoreDoc.score - minScore) / denominator));
-            System.out.println("Document ID: " + doc.get("id") + ", Score: " + (scoreDoc.score - minScore) / denominator + ", Contents: " + doc.get("contents"));
+            responseBuilder.addDocuments(ru.nms.diplom.luceneir.service.Document.newBuilder().setId(doc.get("id")).setScore(scoreDoc.score));
+            System.out.println("Document ID: " + doc.get("id") + ", Score: " + scoreDoc.score + ", Contents: " + doc.get("contents"));
         }
 
+        responseObserver.onNext(responseBuilder.build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getSimilarityScores(SimilarityScoreRequest request, StreamObserver<DocumentsResponse> responseObserver) {
+        Query contentQuery = null;
+        try {
+            contentQuery = parser.parse(QueryParser.escape(request.getQuery()));
+        } catch (ParseException e) {
+            throw new RuntimeException("did not manage to parse query", e);
+        }
+        DocumentsResponse.Builder responseBuilder = DocumentsResponse.newBuilder();
+
+        for (String id : request.getDocIdList()) {
+            TermQuery idQuery = new TermQuery(new Term("id", id));
+
+
+            BooleanQuery combinedQuery = new BooleanQuery.Builder()
+                    .add(contentQuery, BooleanClause.Occur.MUST)
+                    .add(idQuery, BooleanClause.Occur.FILTER)
+                    .build();
+
+            TopDocs topDocs = null;
+            try {
+                topDocs = searcher.search(combinedQuery, 1);
+            } catch (IOException e) {
+                throw new RuntimeException("did not manage to get doc from index", e);
+            }
+
+            if (topDocs.totalHits.value > 0) {
+                ScoreDoc scoreDoc = topDocs.scoreDocs[0];
+                responseBuilder.addDocuments(ru.nms.diplom.luceneir.service.Document.newBuilder().setId(id).setScore(scoreDoc.score));
+            }
+        }
         responseObserver.onNext(responseBuilder.build());
         responseObserver.onCompleted();
     }
