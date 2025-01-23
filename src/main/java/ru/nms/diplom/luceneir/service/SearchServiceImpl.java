@@ -1,5 +1,6 @@
 package ru.nms.diplom.luceneir.service;
 
+import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
@@ -9,15 +10,16 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
+import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.IOException;
 import java.nio.file.Paths;
 
+import static org.apache.lucene.index.IndexWriter.MAX_DOCS;
 import static ru.nms.diplom.luceneir.utils.Constants.INDEX_DIR;
 
 public class SearchServiceImpl extends SearchServiceGrpc.SearchServiceImplBase {
-
     IndexReader reader;
     IndexSearcher searcher;
     StandardAnalyzer analyzer;
@@ -30,14 +32,12 @@ public class SearchServiceImpl extends SearchServiceGrpc.SearchServiceImplBase {
             throw new RuntimeException("did not manage to open fsd dir with index", e);
         }
         searcher = new IndexSearcher(reader);
-
         analyzer = new StandardAnalyzer();
         parser = new QueryParser("contents", analyzer);
     }
 
     @Override
     public void knn(SearchRequest request, StreamObserver<DocumentsResponse> responseObserver) {
-
         Query query = null;
         try {
             query = parser.parse(QueryParser.escape(request.getQuery()));
@@ -106,4 +106,43 @@ public class SearchServiceImpl extends SearchServiceGrpc.SearchServiceImplBase {
         responseObserver.onNext(responseBuilder.build());
         responseObserver.onCompleted();
     }
+
+    @Override
+    public void changeSimilarityParams(BM25TuneRequest request, StreamObserver<Empty> responseObserver) {
+        searcher.setSimilarity(new BM25Similarity(request.getK1(), request.getB()));
+
+        System.out.println("set new similarity: " + searcher.getSimilarity());
+        responseObserver.onNext(Empty.newBuilder().build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getMinScore(MinScoreRequest request, StreamObserver<MinScoreResponse> responseObserver) {
+        Query query;
+        try {
+            query = parser.parse(QueryParser.escape(request.getQuery()));
+        } catch (ParseException e) {
+            throw new RuntimeException("Failed to parse query", e);
+        }
+
+        TopDocs allDocs;
+        try {
+            // Retrieve all documents for the query
+            allDocs = searcher.search(query, MAX_DOCS);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to search documents", e);
+        }
+
+        if (allDocs.scoreDocs.length == 0) {
+            throw new RuntimeException("No matching documents found.");
+        }
+
+        // Find the least similar document (lowest score)
+        ScoreDoc leastSimilarDoc = allDocs.scoreDocs[allDocs.scoreDocs.length - 1];
+        System.out.println("Least similar document ID: " + leastSimilarDoc.doc + ", Score: " + leastSimilarDoc.score);
+
+        responseObserver.onNext(MinScoreResponse.newBuilder().setScore(leastSimilarDoc.score).build());
+        responseObserver.onCompleted();
+    }
+
 }

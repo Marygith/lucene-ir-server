@@ -21,8 +21,22 @@ message Document {
     double score = 2;
 }
 
+message BM25TuneRequest {
+    float k1 = 1;
+    float b = 2;
+}
+message MinScoreRequest {
+    string query = 1;
+}
+
+message MinScoreResponse {
+    float score = 1;
+}
 
 service SearchService {
     rpc knn(SearchRequest) returns (DocumentsResponse);
     rpc getSimilarityScores(SimilarityScoreRequest) returns (DocumentsResponse);
+    rpc changeSimilarityParams(BM25TuneRequest) returns (google.protobuf.Empty);
+    rpc getMinScore(MinScoreRequest) returns (MinScoreResponse);
 }
+import "google/protobuf/empty.proto";

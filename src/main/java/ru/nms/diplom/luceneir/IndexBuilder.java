@@ -38,7 +38,6 @@ public class IndexBuilder {
                 document.add(new StringField("id", String.valueOf(Integer.parseInt(args[1])), Field.Store.YES));
                 document.add(new TextField("contents", args[0].replaceAll("\"", ""), Field.Store.YES));
                 writer.addDocument(document);
-                System.out.println("added document with id " + document.get("id"));
             }
         }
     }
