@@ -28,14 +28,14 @@ public class IndexBuilder {
     }
 
     private static void readAndIndexDataset(IndexWriter writer) throws IOException {
-        try (BufferedReader br = new BufferedReader(new FileReader("D:\\diplom\\shared\\all_passages.csv"))) {
+        try (BufferedReader br = new BufferedReader(new FileReader("D:\\diplom\\data\\all_passages.csv"))) {
             String line;
             int i = 0;
             br.readLine();
             while ((line = br.readLine()) != null) {
                 String[] args = line.split("\\^");
                 Document document = new Document();
-                document.add(new StringField("id", String.valueOf(Integer.parseInt(args[1])), Field.Store.YES));
+                document.add(new StringField("id", args[1], Field.Store.YES));
                 document.add(new TextField("contents", args[0].replaceAll("\"", ""), Field.Store.YES));
                 writer.addDocument(document);
             }

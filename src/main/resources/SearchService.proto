@@ -13,12 +13,12 @@ message DocumentsResponse {
 
 message SimilarityScoreRequest {
     string query = 1;
-    repeated string docId = 2;
+    repeated int32 docId = 2;
 }
 
 message Document {
-    string id = 1;
-    double score = 2;
+    int32 id = 1;
+    float score = 2;
 }
 
 message BM25TuneRequest {

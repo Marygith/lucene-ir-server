@@ -64,7 +64,7 @@ public class SearchServiceImpl extends SearchServiceGrpc.SearchServiceImplBase {
             } catch (IOException e) {
                 throw new RuntimeException("did not manage to get doc from searcher", e);
             }
-            responseBuilder.addDocuments(ru.nms.diplom.luceneir.service.Document.newBuilder().setId(doc.get("id")).setScore(scoreDoc.score));
+            responseBuilder.addDocuments(ru.nms.diplom.luceneir.service.Document.newBuilder().setId(Integer.parseInt(doc.get("id"))).setScore(scoreDoc.score));
             System.out.println("Document ID: " + doc.get("id") + ", Score: " + scoreDoc.score + ", Contents: " + doc.get("contents"));
         }
 
@@ -82,8 +82,9 @@ public class SearchServiceImpl extends SearchServiceGrpc.SearchServiceImplBase {
         }
         DocumentsResponse.Builder responseBuilder = DocumentsResponse.newBuilder();
 
-        for (String id : request.getDocIdList()) {
-            TermQuery idQuery = new TermQuery(new Term("id", id));
+        System.out.println("got similarity scores request for ids: " + request.getDocIdList());
+        for (Integer id : request.getDocIdList()) {
+            TermQuery idQuery = new TermQuery(new Term("id", String.valueOf(id)));
 
 
             BooleanQuery combinedQuery = new BooleanQuery.Builder()
@@ -101,6 +102,10 @@ public class SearchServiceImpl extends SearchServiceGrpc.SearchServiceImplBase {
             if (topDocs.totalHits.value > 0) {
                 ScoreDoc scoreDoc = topDocs.scoreDocs[0];
                 responseBuilder.addDocuments(ru.nms.diplom.luceneir.service.Document.newBuilder().setId(id).setScore(scoreDoc.score));
+            } else {
+                System.out.println("did not find similarity score for doc with id " + id);
+                responseBuilder.addDocuments(ru.nms.diplom.luceneir.service.Document.newBuilder().setId(id).setScore(0));
+
             }
         }
         responseObserver.onNext(responseBuilder.build());
